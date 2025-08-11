@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.runCommand({ ping: 1 })']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: consumer
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - PORT=8080
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DATABASE=restaurantdb
+    ports:
+      - '8080:8080'
+    restart: unless-stopped
+
+  consumer-dev:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile.dev
+    container_name: consumer-dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - PORT=8080
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DATABASE=restaurantdb
+    volumes:
+      - ./consumer:/app
+    ports:
+      - '8080:8080'
+    restart: unless-stopped
+    profiles: ["dev"]
+
+volumes:
+  mongo_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
+
+
