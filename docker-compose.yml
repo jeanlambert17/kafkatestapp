@@ -1,6 +1,26 @@
 version: '3.8'
 
 services:
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: kafka
+    restart: unless-stopped
+    environment:
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - '9094:9094'
+    volumes:
+      - kafka_data:/bitnami/kafka
+  
   mongo:
     image: mongo:7
     container_name: mongo
@@ -27,6 +47,7 @@ services:
       - PORT=8080
       - MONGODB_URI=mongodb://mongo:27017
       - MONGODB_DATABASE=restaurantdb
+      - KAFKA_BROKER=kafka:9092
     ports:
       - '8080:8080'
     restart: unless-stopped
@@ -43,6 +64,7 @@ services:
       - PORT=8080
       - MONGODB_URI=mongodb://mongo:27017
       - MONGODB_DATABASE=restaurantdb
+      - KAFKA_BROKER=kafka:9092
     volumes:
       - ./consumer:/app
     ports:
@@ -52,8 +74,6 @@ services:
 
 volumes:
   mongo_data:
-    driver: local
-  zookeeper_data:
     driver: local
   kafka_data:
     driver: local

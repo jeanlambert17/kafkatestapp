@@ -50,8 +50,16 @@ This repo contains a Go `consumer` service (Gin) and MongoDB, orchestrated via D
 - Kafka: list topics
 
 ```bash
-  docker compose exec kafka kafka-topics.sh --list --bootstrap-server kafka:29092
+  docker compose exec kafka kafka-topics.sh --list --bootstrap-server kafka:9094
 ```
+
+- Kafka: create order
+
+```bash
+  docker compose exec kafka kafka-console-producer.sh --bootstrap-server kafka:9092 --topic orders
+```
+
+  {"restaurantId":"689904ceab76a67dea61142a","items":["689904ceab76a67dea61142d"]}
 
 - Rebuild only the Go service:
 

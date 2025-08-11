@@ -38,6 +38,10 @@ func main() {
 	orderController := ordersFeature.NewController(orderService)
 	orderController.RegisterRoutes(router)
 
+	// Start Kafka consumer for orders
+	stopKafka := ordersFeature.StartKafkaConsumer(ctx, cfg.KafkaBroker, "orders", "consumer-orders-group", orderService)
+	c.ShutdownFns = append(c.ShutdownFns, stopKafka)
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: router,

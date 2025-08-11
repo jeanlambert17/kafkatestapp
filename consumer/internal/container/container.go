@@ -18,6 +18,9 @@ type Container struct {
 
 	Orders *orders.Service
 	Items  *items.Service
+
+	// shutdown functions
+	ShutdownFns []func()
 }
 
 func New(ctx context.Context, cfg config.Config) (*Container, error) {
@@ -35,15 +38,17 @@ func New(ctx context.Context, cfg config.Config) (*Container, error) {
 	container.Items = items.NewService(database)
 
 	// Initialize feature services
-	container.Orders = orders.NewService(
-		database,
-		*container.Items,
-	)
+	container.Orders = orders.NewService(database, *container.Items)
 
 	return container, nil
 }
 
 func (c *Container) Close(ctx context.Context) error {
+	for i := len(c.ShutdownFns) - 1; i >= 0; i-- {
+		if c.ShutdownFns[i] != nil {
+			c.ShutdownFns[i]()
+		}
+	}
 	if c.MongoClient != nil {
 		return c.MongoClient.Disconnect(ctx)
 	}

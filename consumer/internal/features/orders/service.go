@@ -34,12 +34,6 @@ func NewService(database *mongo.Database, items items.Service) *Service {
 }
 
 func (s *Service) CreateOrder(ctx *gin.Context, order *models.Order) (primitive.ObjectID, error) {
-	if order.ID.IsZero() {
-		order.ID = primitive.NewObjectID()
-	}
-	if order.CreationDate.IsZero() {
-		order.CreationDate = time.Now().UTC()
-	}
 	restaurantIDHex := ctx.Request.Header.Get("x-org")
 	if restaurantIDHex == "" {
 		return primitive.NilObjectID, errors.New("missing or invalid x-org header")
@@ -50,26 +44,41 @@ func (s *Service) CreateOrder(ctx *gin.Context, order *models.Order) (primitive.
 	}
 
 	order.RestaurantID = restaurantID
+	return s.finalizeAndInsert(ctx.Request.Context(), order)
+}
 
-	// Fetch order items from the "items" collection in MongoDB
-	items, itemsErr := s.items.ListItems(ctx, order.Items)
+// CreateOrderFromEvent allows creating an order from a background consumer using a std context and explicit restaurant id
+func (s *Service) CreateOrderFromEvent(ctx context.Context, restaurantID primitive.ObjectID, itemIDs []primitive.ObjectID) (primitive.ObjectID, error) {
+	order := &models.Order{
+		RestaurantID: restaurantID,
+		Items:        itemIDs,
+	}
+	return s.finalizeAndInsert(ctx, order)
+}
+
+// finalizeAndInsert consolidates common steps to complete and persist an order
+func (s *Service) finalizeAndInsert(ctx context.Context, order *models.Order) (primitive.ObjectID, error) {
+	if order.ID.IsZero() {
+		order.ID = primitive.NewObjectID()
+	}
+	if order.CreationDate.IsZero() {
+		order.CreationDate = time.Now().UTC()
+	}
+
+	fetchedItems, itemsErr := s.items.ListItems(ctx, order.Items)
 	if itemsErr != nil {
 		return primitive.NilObjectID, itemsErr
 	}
-
-	totalCost := 0.0
-	totalPrice := 0.0
-
-	for _, item := range items {
-		totalCost += item.Cost
-		totalPrice += item.Price
+	var totalCost float64
+	var totalPrice float64
+	for _, it := range fetchedItems {
+		totalCost += it.Cost
+		totalPrice += it.Price
 	}
-
 	order.TotalCost = totalCost
 	order.TotalPrice = totalPrice
 
-	_, err := s.collection.InsertOne(ctx, order)
-	if err != nil {
+	if _, err := s.collection.InsertOne(ctx, order); err != nil {
 		return primitive.NilObjectID, err
 	}
 	return order.ID, nil
@@ -98,19 +107,20 @@ func (s *Service) ListOrders(ctx *gin.Context) (ListOrdersResponse, error) {
 	}
 
 	filter := bson.D{{Key: "restaurantId", Value: restaurantID}}
-	count, err := s.collection.CountDocuments(ctx, filter)
+	reqCtx := ctx.Request.Context()
+	count, err := s.collection.CountDocuments(reqCtx, filter)
 	if err != nil {
 		return ListOrdersResponse{}, err
 	}
 
-	cursor, err := s.collection.Find(ctx, filter)
+	cursor, err := s.collection.Find(reqCtx, filter)
 	if err != nil {
 		return ListOrdersResponse{}, err
 	}
-	defer cursor.Close(ctx)
+	defer cursor.Close(reqCtx)
 
 	var orders []models.Order
-	for cursor.Next(ctx) {
+	for cursor.Next(reqCtx) {
 		var order models.Order
 		if err := cursor.Decode(&order); err != nil {
 			return ListOrdersResponse{}, err
