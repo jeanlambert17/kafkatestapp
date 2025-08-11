@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.runCommand({ ping: 1 })']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+
   kafka:
     image: bitnami/kafka:latest
     container_name: kafka
@@ -20,20 +41,6 @@ services:
       - '9094:9094'
     volumes:
       - kafka_data:/bitnami/kafka
-  
-  mongo:
-    image: mongo:7
-    container_name: mongo
-    restart: unless-stopped
-    ports:
-      - '27017:27017'
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.runCommand({ ping: 1 })']
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   consumer:
     build:
@@ -58,8 +65,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: consumer-dev
     depends_on:
-      mongo:
-        condition: service_healthy
+      - mongo
+      - kafka
     environment:
       - PORT=8080
       - MONGODB_URI=mongodb://mongo:27017
@@ -69,6 +76,45 @@ services:
       - ./consumer:/app
     ports:
       - '8080:8080'
+    restart: unless-stopped
+    profiles: ["dev"]
+
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: producer
+    environment:
+      - PORT=8081
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_ADDR=redis:6379
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DATABASE=restaurantdb
+    depends_on:
+      - kafka
+      - redis
+    ports:
+      - '8081:8081'
+    restart: unless-stopped
+
+  producer-dev:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile.dev
+    container_name: producer-dev
+    environment:
+      - PORT=8081
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_ADDR=redis:6379
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DATABASE=restaurantdb
+    depends_on:
+      - kafka
+      - redis
+    volumes:
+      - ./producer:/app
+    ports:
+      - '8081:8081'
     restart: unless-stopped
     profiles: ["dev"]
 

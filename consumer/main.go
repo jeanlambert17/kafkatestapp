@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,7 +16,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	c, err := container.New(ctx, cfg)

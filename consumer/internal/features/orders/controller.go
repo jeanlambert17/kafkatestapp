@@ -19,47 +19,22 @@ func NewController(service *Service) *Controller {
 
 func (c *Controller) RegisterRoutes(router *gin.Engine) {
 	orders := router.Group("/orders")
-	orders.GET("", c.ListOrders)
-	orders.GET("/:id", c.GetOrder)
 	orders.POST("", c.CreateOrder)
 }
 
-func (c *Controller) ListOrders(ctx *gin.Context) {
-	data, err := c.service.ListOrders(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	ctx.JSON(http.StatusOK, data)
-}
-
-func (c *Controller) GetOrder(ctx *gin.Context) {
-	idParam := ctx.Param("id")
-	oid, err := primitive.ObjectIDFromHex(idParam)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-	order, err := c.service.GetOrderByID(ctx.Request.Context(), oid)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if order == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-		return
-	}
-	ctx.JSON(http.StatusOK, order)
+type createOrderItem struct {
+	ID       string `json:"id"`
+	Quantity int    `json:"quantity"`
 }
 
 type createOrderBody struct {
-	Items []string `form:"items" json:"items"`
+	Items []createOrderItem `json:"items"`
 }
 
 func (c *Controller) CreateOrder(ctx *gin.Context) {
 	var body createOrderBody
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err})
 		return
 	}
 	if len(body.Items) == 0 {
@@ -67,20 +42,22 @@ func (c *Controller) CreateOrder(ctx *gin.Context) {
 		return
 	}
 
-	// Convert item hex IDs to ObjectIDs
-	itemIDs := make([]primitive.ObjectID, 0, len(body.Items))
-	for _, idStr := range body.Items {
-		oid, err := primitive.ObjectIDFromHex(idStr)
+	// Convert to order items
+	orderItems := make([]models.OrderItem, 0, len(body.Items))
+	for _, it := range body.Items {
+		oid, err := primitive.ObjectIDFromHex(it.ID)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid item id: " + idStr})
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid item id: " + it.ID})
 			return
 		}
-		itemIDs = append(itemIDs, oid)
+		if it.Quantity <= 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "quantity must be > 0 for item: " + it.ID})
+			return
+		}
+		orderItems = append(orderItems, models.OrderItem{ItemID: oid, Quantity: it.Quantity})
 	}
 
-	order := models.Order{
-		Items: itemIDs,
-	}
+	order := models.Order{Items: orderItems}
 
 	id, err := c.service.CreateOrder(ctx, &order)
 	if err != nil {

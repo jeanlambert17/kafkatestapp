@@ -12,17 +12,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Service struct {
 	db         *mongo.Database
 	collection *mongo.Collection
 	items      items.Service
-}
-
-type ListOrdersResponse struct {
-	Results []models.Order `json:"results"`
-	Count   int64          `json:"count"`
 }
 
 func NewService(database *mongo.Database, items items.Service) *Service {
@@ -44,20 +40,20 @@ func (s *Service) CreateOrder(ctx *gin.Context, order *models.Order) (primitive.
 	}
 
 	order.RestaurantID = restaurantID
-	return s.finalizeAndInsert(ctx.Request.Context(), order)
+	return s.createOrder(ctx.Request.Context(), order)
 }
 
 // CreateOrderFromEvent allows creating an order from a background consumer using a std context and explicit restaurant id
-func (s *Service) CreateOrderFromEvent(ctx context.Context, restaurantID primitive.ObjectID, itemIDs []primitive.ObjectID) (primitive.ObjectID, error) {
+func (s *Service) CreateOrderFromEvent(ctx context.Context, restaurantID primitive.ObjectID, items []models.OrderItem) (primitive.ObjectID, error) {
 	order := &models.Order{
 		RestaurantID: restaurantID,
-		Items:        itemIDs,
+		Items:        items,
 	}
-	return s.finalizeAndInsert(ctx, order)
+	return s.createOrder(ctx, order)
 }
 
-// finalizeAndInsert consolidates common steps to complete and persist an order
-func (s *Service) finalizeAndInsert(ctx context.Context, order *models.Order) (primitive.ObjectID, error) {
+// createOrder consolidates common steps to complete and persist an order
+func (s *Service) createOrder(ctx context.Context, order *models.Order) (primitive.ObjectID, error) {
 	if order.ID.IsZero() {
 		order.ID = primitive.NewObjectID()
 	}
@@ -65,15 +61,26 @@ func (s *Service) finalizeAndInsert(ctx context.Context, order *models.Order) (p
 		order.CreationDate = time.Now().UTC()
 	}
 
-	fetchedItems, itemsErr := s.items.ListItems(ctx, order.Items)
+	// Build list of item IDs from order items
+	itemIDs := make([]primitive.ObjectID, 0, len(order.Items))
+	for _, it := range order.Items {
+		itemIDs = append(itemIDs, it.ItemID)
+	}
+	fetchedItems, itemsErr := s.items.ListItems(ctx, itemIDs)
 	if itemsErr != nil {
 		return primitive.NilObjectID, itemsErr
 	}
 	var totalCost float64
 	var totalPrice float64
-	for _, it := range fetchedItems {
-		totalCost += it.Cost
-		totalPrice += it.Price
+	// Map itemID -> item for price/cost lookup
+	for _, it := range order.Items {
+		for _, ref := range fetchedItems {
+			if ref.ID == it.ItemID {
+				totalCost += ref.Cost * float64(it.Quantity)
+				totalPrice += ref.Price * float64(it.Quantity)
+				break
+			}
+		}
 	}
 	order.TotalCost = totalCost
 	order.TotalPrice = totalPrice
@@ -81,65 +88,24 @@ func (s *Service) finalizeAndInsert(ctx context.Context, order *models.Order) (p
 	if _, err := s.collection.InsertOne(ctx, order); err != nil {
 		return primitive.NilObjectID, err
 	}
+
+	// Update materialized daily aggregate (one document per day and restaurant)
+	dayUTC := time.Date(order.CreationDate.UTC().Year(), order.CreationDate.UTC().Month(), order.CreationDate.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	filter := bson.M{
+		"restaurantId": order.RestaurantID,
+		"day":          dayUTC,
+	}
+	update := bson.M{
+		"$setOnInsert": bson.M{
+			"restaurantId": order.RestaurantID,
+			"day":          dayUTC,
+		},
+		"$inc": bson.M{
+			"totalOrders": 1,
+			"revenue":     order.TotalPrice,
+		},
+	}
+	_, _ = s.db.Collection("daily_aggregates").UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+
 	return order.ID, nil
-}
-
-func (s *Service) GetOrderByID(ctx context.Context, id primitive.ObjectID) (*models.Order, error) {
-	var order models.Order
-	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&order)
-	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &order, nil
-}
-
-func (s *Service) ListOrders(ctx *gin.Context) (ListOrdersResponse, error) {
-	restaurantIDHex := ctx.Request.Header.Get("x-org")
-	if restaurantIDHex == "" {
-		return ListOrdersResponse{}, errors.New("missing or invalid x-org header")
-	}
-	restaurantID, restaurantIDErr := primitive.ObjectIDFromHex(restaurantIDHex)
-	if restaurantIDErr != nil {
-		return ListOrdersResponse{}, errors.New("invalid x-org header format")
-	}
-
-	filter := bson.D{{Key: "restaurantId", Value: restaurantID}}
-	reqCtx := ctx.Request.Context()
-	count, err := s.collection.CountDocuments(reqCtx, filter)
-	if err != nil {
-		return ListOrdersResponse{}, err
-	}
-
-	cursor, err := s.collection.Find(reqCtx, filter)
-	if err != nil {
-		return ListOrdersResponse{}, err
-	}
-	defer cursor.Close(reqCtx)
-
-	var orders []models.Order
-	for cursor.Next(reqCtx) {
-		var order models.Order
-		if err := cursor.Decode(&order); err != nil {
-			return ListOrdersResponse{}, err
-		}
-		orders = append(orders, order)
-	}
-	if err := cursor.Err(); err != nil {
-		return ListOrdersResponse{}, err
-	}
-
-	return ListOrdersResponse{Results: orders, Count: count}, nil
-}
-
-func (s *Service) UpdateOrder(ctx context.Context, id primitive.ObjectID, update bson.M) error {
-	_, err := s.collection.UpdateByID(ctx, id, bson.M{"$set": update})
-	return err
-}
-
-func (s *Service) DeleteOrder(ctx context.Context, id primitive.ObjectID) error {
-	_, err := s.collection.DeleteOne(ctx, bson.M{"_id": id})
-	return err
 }

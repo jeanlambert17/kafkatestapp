@@ -23,6 +23,6 @@ func Load() Config {
 		Port:          getEnv("PORT", "8080"),
 		MongoURI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),
 		MongoDatabase: getEnv("MONGODB_DATABASE", "restaurantdb"),
-		KafkaBroker:   getEnv("KAFKA_BROKER", "localhost:9094"),
+		KafkaBroker:   getEnv("KAFKA_BROKER", "localhost:9092"),
 	}
 }

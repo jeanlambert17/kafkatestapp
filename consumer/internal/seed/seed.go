@@ -49,25 +49,25 @@ func SeedDatabase(ctx context.Context, db *mongo.Database) error {
 			switch r.Name {
 			case "Sunset Diner":
 				items = append(items,
-					models.Item{Name: "Sunset Burger", RestaurantID: r.ID, Price: 12.50, Cost: 7.10, Quantity: 120},
-					models.Item{Name: "Golden Fries", RestaurantID: r.ID, Price: 4.25, Cost: 1.20, Quantity: 300},
-					models.Item{Name: "Dusk Salad", RestaurantID: r.ID, Price: 9.40, Cost: 3.50, Quantity: 180},
+					models.Item{Name: "Sunset Burger", RestaurantID: r.ID, Price: 12.50, Cost: 7.10},
+					models.Item{Name: "Golden Fries", RestaurantID: r.ID, Price: 4.25, Cost: 1.20},
+					models.Item{Name: "Dusk Salad", RestaurantID: r.ID, Price: 9.40, Cost: 3.50},
 				)
 			case "Ocean Bistro":
 				items = append(items,
-					models.Item{Name: "Seaside Salmon", RestaurantID: r.ID, Price: 18.75, Cost: 10.20, Quantity: 70},
-					models.Item{Name: "Lemon Garlic Shrimp", RestaurantID: r.ID, Price: 16.40, Cost: 8.00, Quantity: 90},
-					models.Item{Name: "Harbor Clam Chowder", RestaurantID: r.ID, Price: 11.60, Cost: 5.10, Quantity: 150},
+					models.Item{Name: "Seaside Salmon", RestaurantID: r.ID, Price: 18.75, Cost: 10.20},
+					models.Item{Name: "Lemon Garlic Shrimp", RestaurantID: r.ID, Price: 16.40, Cost: 8.00},
+					models.Item{Name: "Harbor Clam Chowder", RestaurantID: r.ID, Price: 11.60, Cost: 5.10},
 				)
 			case "Mountain Grill":
 				items = append(items,
-					models.Item{Name: "Trail Steak", RestaurantID: r.ID, Price: 21.90, Cost: 12.00, Quantity: 60},
-					models.Item{Name: "Campfire Chili", RestaurantID: r.ID, Price: 9.50, Cost: 3.80, Quantity: 140},
-					models.Item{Name: "Summit Skillet", RestaurantID: r.ID, Price: 14.30, Cost: 6.20, Quantity: 110},
+					models.Item{Name: "Trail Steak", RestaurantID: r.ID, Price: 21.90, Cost: 12.00},
+					models.Item{Name: "Campfire Chili", RestaurantID: r.ID, Price: 9.50, Cost: 3.80},
+					models.Item{Name: "Summit Skillet", RestaurantID: r.ID, Price: 14.30, Cost: 6.20},
 				)
 			default:
 				items = append(items,
-					models.Item{Name: "Chef Special", RestaurantID: r.ID, Price: 13.30, Cost: 6.00, Quantity: 100},
+					models.Item{Name: "Chef Special", RestaurantID: r.ID, Price: 13.30, Cost: 6.00},
 				)
 			}
 		}
