@@ -9,10 +9,12 @@ This repo contains a Go `consumer` service (Gin) and MongoDB, orchestrated via D
 ## Services
 
 - mongo: MongoDB 7
+- kafka: Apache Kafka 3.6 (PLAINTEXT)
+- redis
 - consumer: Go service (production build)
 - consumer-dev: Go service with hot reload (Air)
-- zookeeper: Zookeeper (for Kafka)
-- kafka: Apache Kafka 3.6 (PLAINTEXT)
+- producer: Go service (production build)
+- producer-dev: Go service with hot reload (Air)
 
 ## Docker Compose commands
 
