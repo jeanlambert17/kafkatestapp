@@ -57,20 +57,8 @@ This repo contains a Go `consumer` service (Gin) and MongoDB, orchestrated via D
 
 ```bash
   docker compose exec kafka kafka-console-producer.sh --bootstrap-server kafka:9092 --topic orders
-```
-
+  # Copy this to terminal and close it to commit changes
   {"restaurantId":"689904ceab76a67dea61142a","items":["689904ceab76a67dea61142d"]}
-
-- Rebuild only the Go service:
-
-```bash
-  docker compose build consumer
-```
-
-- Exec into dev container shell:
-
-```bash
-  docker compose exec consumer-dev sh
 ```
 
 - Connect to mongodb
@@ -81,11 +69,30 @@ This repo contains a Go `consumer` service (Gin) and MongoDB, orchestrated via D
   use restaurantdb
 ```
 
-## Endpoints
+## APIs
 
-- Consumer API: `http://localhost:8080`
-  - GET `/orders`
-  - GET `/orders/:id`
+### Producer (http://localhost:8081)
+- Orders
+  - GET `/orders` (headers: `x-org`) → list orders for restaurant
+  - GET `/orders/recent` (headers: `x-org`) → recent orders (15m window, cached)
+  - POST `/orders` (headers: `x-org`, body): creates order event in Kafka
+    - Body:
+      ```json
+      { "items": [ { "id": "<itemId>", "quantity": 1 } ] }
+      ```
+- Restaurants
+  - GET `/restaurants` → list restaurants with items
+- Analytics
+  - GET `/analytics/daily-aggregates?from=MM/DD/YYYY&to=MM/DD/YYYY` (headers: `x-org`) → totals per day
+  - GET `/analytics/popular-items?from=MM/DD/YYYY&to=MM/DD/YYYY` (headers: `x-org`) → top items (by quantity) with revenue
+
+### Consumer (http://localhost:8080)
+- Orders
+  - POST `/orders` (headers: `x-org`, body): creates order directly in DB
+    - Body:
+      ```json
+      { "items": [ { "id": "<itemId>", "quantity": 1 } ] }
+      ```
 
 ## Seeding
 
@@ -98,3 +105,5 @@ Defaults are set in compose:
 - `PORT=8080`
 - `MONGODB_URI=mongodb://mongo:27017`
 - `MONGODB_DATABASE=restaurantdb`
+- `KAFKA_BROKER=kafka:9092`
+- `REDIS_ADDR=redis:6379`
